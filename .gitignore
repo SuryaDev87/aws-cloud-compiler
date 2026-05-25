@@ -1,0 +1,13 @@
+# Ignore dependency folders permanently
+node_modules/
+**/node_modules/
+
+# Ignore production builds
+frontend/dist/
+
+# Ignore Java build directories & IDE setups
+backend/target/
+.idea/
+*.pem
+*.jar
+.DS_Store
