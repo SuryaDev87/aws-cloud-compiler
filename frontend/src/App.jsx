@@ -1,84 +1,88 @@
 import React, { useState } from 'react';
+import { Navbar } from './components/Navbar.jsx';
+import { CodeEditor } from './components/CodeEditor.jsx';
+import { TelemetryPanel } from './components/TelemetryPanel.jsx';
+import { TerminalConsole } from './components/TerminalConsole.jsx';
 
-function App() {
-  const [code, setCode] = useState('print("Hello From AWS Cloud Compiler!")');
+const TEMPLATES = {
+  python: 'print("Hello From AWS Cloud Compiler!")',
+  java: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello From AWS Cloud Compiler!");\n    }\n}',
+  cpp: '#include <iostream>\n\nint main() {\n    std::cout << "Hello From AWS Cloud Compiler!" << std::endl;\n    return 0;\n}'
+};
+
+export default function App() {
   const [language, setLanguage] = useState('python');
+  const [code, setCode] = useState(TEMPLATES.python);
   const [output, setOutput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [execTime, setExecTime] = useState(null);
+  const [status, setStatus] = useState('idle');
+
+  const handleLanguageChange = (lang) => {
+    setLanguage(lang);
+    setCode(TEMPLATES[lang]);
+  };
 
   const handleRun = async () => {
     setLoading(true);
-    setOutput('Executing code on AWS EC2...');
+    setStatus('running');
+    setOutput('Compiling and running code on remote server...');
+    const start = performance.now();
+    
     try {
-      const response = await fetch('http://13.50.5.227:8081/api/compile', {
+      const res = await fetch('http://13.50.5.227:8081/api/compile', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ language, code }),
       });
-      const data = await response.json();
-      setOutput(data.output || 'No output returned.');
-    } catch (error) {
-      setOutput('Error connecting to backend server: ' + error.message);
+      const data = await res.json();
+      
+      setExecTime(((performance.now() - start) / 1000).toFixed(2));
+      
+      // Look for standard output strings from your backend compiler
+      if (data.error) {
+        setStatus('error');
+        setOutput(data.error);
+      } else {
+        setStatus('success');
+        setOutput(data.output || 'Code executed successfully with no output returned.');
+      }
+    } catch (err) {
+      setStatus('error');
+      setOutput(`Connection Error: Unable to reach compile server.\n${err.message}`);
+      setExecTime('0.00');
     } finally {
-      setLanguage(false);
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col font-sans">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold tracking-wider text-cyan-400"> AWS Cloud Compiler</h1>
-        <div className="flex items-center gap-4">
-          <select 
-            value={language} 
-            onChange={(e) => setLanguage(e.target.value)}
-            className="bg-slate-700 border border-slate-600 rounded px-3 py-1.5 focus:outline-none focus:border-cyan-400"
-          >
-            <option value="python">Python 3</option>
-          </select>
-          <button 
-            onClick={handleRun}
-            disabled={loading}
-            className={`font-semibold px-5 py-1.5 rounded transition-all ${
-              loading ? 'bg-slate-600 cursor-not-allowed' : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20'
-            }`}
-          >
-            {loading ? 'Running...' : 'Run Code'}
-          </button>
-        </div>
-      </header>
-
-      {/* Main Workspace */}
-      <main className="flex-1 flex flex-col md:flex-row p-6 gap-6">
-        {/* Code Editor Panel */}
-        <div className="flex-1 flex flex-col bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <div className="bg-slate-850 px-4 py-2 border-b border-slate-700 text-sm font-mono text-slate-400">
-            main.py
-          </div>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="flex-1 p-4 bg-slate-950 font-mono text-sm text-emerald-400 focus:outline-none resize-none leading-relaxed"
-            rows="15"
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased">
+      <Navbar 
+        language={language} 
+        onLanguageChange={handleLanguageChange} 
+        onRun={handleRun} 
+        loading={loading} 
+      />
+      
+      <main className="flex-1 flex flex-col md:flex-row p-5 gap-5 overflow-hidden max-h-[calc(100vh-70px)]">
+        <CodeEditor 
+          code={code} 
+          setCode={setCode} 
+          language={language} 
+        />
+        
+        <div className="w-full md:w-[380px] flex flex-col gap-5 h-full">
+          <TelemetryPanel 
+            execTime={execTime} 
+            status={status} 
           />
-        </div>
-
-        {/* Console Output Panel */}
-        <div className="w-full md:w-1/3 flex flex-col bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <div className="bg-slate-850 px-4 py-2 border-b border-slate-700 text-sm font-mono text-slate-400">
-            Console Output
-          </div>
-          <pre className="flex-1 p-4 bg-slate-900 font-mono text-sm text-slate-200 overflow-auto whitespace-pre-wrap">
-            {output || 'Click "Run Code" to view execution results.'}
-          </pre>
+          <TerminalConsole 
+            output={output} 
+            status={status} 
+          />
         </div>
       </main>
     </div>
   );
 }
-
-export default App;
