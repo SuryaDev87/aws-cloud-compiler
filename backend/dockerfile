@@ -1,0 +1,17 @@
+# Step 1: Build stage using Maven and Java 21
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Step 2: Run stage using a lightweight Java runtime
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=build /app/target/demo-0.0.1-SNAPSHOT.jar app.jar
+
+# Install Docker CLI inside the container so the backend can spin up sibling sandboxes
+RUN apk add --no-cache docker-cli
+
+EXPOSE 8081
+ENTRYPOINT ["java", "-jar", "app.jar"]
