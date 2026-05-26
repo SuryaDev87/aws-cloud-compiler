@@ -31,9 +31,10 @@ public class CompilerService {
                 "docker", "run", "--rm",
                 "-i",                  // Interactive: read from STDIN
                 "--net", "none",       // Sandbox: block network access
-                "--memory", "512m",    // Bumping to 512m gives the JVM room to compile in memory
+                "--memory", "512m",    // JVM needs slightly more memory allocation to compile
                 "amazoncorretto:21-alpine", 
-                "java", "-"            // Source-file mode: compiles and executes directly from STDIN
+                "sh", "-c", "cat > Main.java && javac Main.java && java Main"
+                // Takes STDIN code, writes it to Main.java internally, compiles it, and runs it
             );
         } else if ("cpp".equals(language) || "c++".equals(language)) {
             command = Arrays.asList(
@@ -43,6 +44,7 @@ public class CompilerService {
                 "--memory", "256m",    // Limit memory usage
                 "frolvlad/alpine-gxx", // Lightweight image containing gcc/g++ compilers
                 "sh", "-c", "cat > main.cpp && g++ main.cpp -o main && ./main" 
+                // Takes STDIN code, writes it to main.cpp internally, compiles it, and runs it
             );
         } else {
             resultMap.put("output", "Error: Unsupported language '" + language + "'. Only Python, Java, and C++ are supported.");
@@ -60,7 +62,7 @@ public class CompilerService {
                 writer.flush();
             }
 
-            // 4. Bumped timeout constraint to 10 seconds to allow heavy runtimes like Java to finish initializing
+            // 4. Enforce strict execution timeout limits (Protects against infinite loops)
             boolean finished = process.waitFor(10, TimeUnit.SECONDS);
 
             if (!finished) {
