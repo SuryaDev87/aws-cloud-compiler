@@ -32,7 +32,7 @@ public class CompilerService {
                 "-i",                  // Interactive: read from STDIN
                 "--net", "none",       // Sandbox: block network access
                 "--memory", "256m",    // Java runtimes need slightly more memory
-                "openjdk:21-slim",     // Standard OpenJDK build that natively supports STDIN source execution
+                "amazoncorretto:21-alpine", // Stable Amazon Corretto JDK image
                 "java", "-"            // Source-file mode: compiles and executes directly from STDIN
             );
         } else if ("cpp".equals(language) || "c++".equals(language)) {
