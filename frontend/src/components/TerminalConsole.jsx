@@ -12,7 +12,7 @@ export function TerminalConsole({ output, status }) {
             <span className="w-3 h-3 rounded-full bg-green-500"></span>
           </div>
 
-          <span className="text-sm text-slate-300 font-mono">terminal</span>
+          <span className="text-sm text-slate-300 font-mono">Output</span>
         </div>
 
         {status !== "idle" && (
