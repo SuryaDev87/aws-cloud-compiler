@@ -31,8 +31,8 @@ public class CompilerService {
                 "docker", "run", "--rm",
                 "-i",                  // Interactive: read from STDIN
                 "--net", "none",       // Sandbox: block network access
-                "--memory", "256m",    // Java runtimes need slightly more memory
-                "amazoncorretto:21-alpine", // Stable Amazon Corretto JDK image
+                "--memory", "512m",    // Bumping to 512m gives the JVM room to compile in memory
+                "amazoncorretto:21-alpine", 
                 "java", "-"            // Source-file mode: compiles and executes directly from STDIN
             );
         } else if ("cpp".equals(language) || "c++".equals(language)) {
@@ -43,7 +43,6 @@ public class CompilerService {
                 "--memory", "256m",    // Limit memory usage
                 "frolvlad/alpine-gxx", // Lightweight image containing gcc/g++ compilers
                 "sh", "-c", "cat > main.cpp && g++ main.cpp -o main && ./main" 
-                // Takes STDIN code, writes it to main.cpp, compiles it, and executes it immediately
             );
         } else {
             resultMap.put("output", "Error: Unsupported language '" + language + "'. Only Python, Java, and C++ are supported.");
@@ -61,12 +60,12 @@ public class CompilerService {
                 writer.flush();
             }
 
-            // 4. Enforce strict execution timeout limits (Protects against infinite loops)
-            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
+            // 4. Bumped timeout constraint to 10 seconds to allow heavy runtimes like Java to finish initializing
+            boolean finished = process.waitFor(10, TimeUnit.SECONDS);
 
             if (!finished) {
                 process.destroyForcibly();
-                resultMap.put("output", "Timeout Error: Code execution exceeded the 5-second limit.");
+                resultMap.put("output", "Timeout Error: Code execution exceeded the 10-second limit.");
                 return resultMap;
             }
 
