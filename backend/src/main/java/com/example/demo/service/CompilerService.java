@@ -4,7 +4,6 @@ import com.example.demo.dto.ExecuteRequest;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
-import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -20,26 +19,27 @@ public class CompilerService {
             return resultMap;
         }
 
-        Path tempFile = null;
         try {
-            // 1. Create a temporary file on the host (EC2) system
-            String prefix = "script-" + System.currentTimeMillis() + "-";
-            tempFile = Files.createTempFile(prefix, ".py");
-            Files.writeString(tempFile, request.getCode());
-
-            // 2. Build the exact sandboxed Docker command
+            // 1. Build a docker command that reads from standard input (-i)
+            // Notice: No file mounts (-v) are used here!
             List<String> command = Arrays.asList(
                 "docker", "run", "--rm",
-                "-v", tempFile.toAbsolutePath().toString() + ":/app/script.py",
-                "--net", "none",
-                "--memory", "128m",
+                "-i",                  // Interactive mode: allows us to stream code to STDIN
+                "--net", "none",       // Secure sandbox: block network access
+                "--memory", "128m",    // Limit memory usage
                 "python:3.10-slim",
-                "python", "/app/script.py"
+                "python", "-"          // Tell Python to execute code directly from standard input
             );
 
-            // 3. Start the process on the OS level
+            // 2. Start the process on the OS level
             ProcessBuilder pb = new ProcessBuilder(command);
             Process process = pb.start();
+
+            // 3. Write the user's code straight into the container's standard input stream
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()))) {
+                writer.write(request.getCode());
+                writer.flush();
+            }
 
             // 4. Enforce a strict timeout constraint (Protects against infinite loops)
             boolean finished = process.waitFor(5, TimeUnit.SECONDS);
@@ -62,13 +62,6 @@ public class CompilerService {
 
         } catch (IOException | InterruptedException e) {
             resultMap.put("output", "Execution System Error: " + e.getMessage());
-        } finally {
-            // 6. Housekeeping: Always delete the temporary code file from the server disk
-            if (tempFile != null) {
-                try {
-                    Files.deleteIfExists(tempFile);
-                } catch (IOException ignored) {}
-            }
         }
 
         return resultMap;
