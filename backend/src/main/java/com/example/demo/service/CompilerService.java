@@ -14,34 +14,54 @@ public class CompilerService {
         Map<String, String> resultMap = new HashMap<>();
         String language = request.getLanguage().toLowerCase();
         
-        if (!"python".equals(language)) {
-            resultMap.put("output", "Error: Only 'python' is supported at this stage.");
+        List<String> command;
+
+        // 1. Configure the sandboxed container command based on the requested language
+        if ("python".equals(language)) {
+            command = Arrays.asList(
+                "docker", "run", "--rm",
+                "-i",                  // Interactive: read from STDIN
+                "--net", "none",       // Sandbox: block network access
+                "--memory", "128m",    // Limit memory usage
+                "python:3.10-slim",
+                "python", "-"          // Run python directly from standard input stream
+            );
+        } else if ("java".equals(language)) {
+            command = Arrays.asList(
+                "docker", "run", "--rm",
+                "-i",                  // Interactive: read from STDIN
+                "--net", "none",       // Sandbox: block network access
+                "--memory", "256m",    // Java runtimes need slightly more memory
+                "eclipse-temurin:21-jdk-alpine", 
+                "java", "-"            // Source-file mode: compiles and executes directly from STDIN
+            );
+        } else if ("cpp".equals(language) || "c++".equals(language)) {
+            command = Arrays.asList(
+                "docker", "run", "--rm",
+                "-i",                  // Interactive: read from STDIN
+                "--net", "none",       // Sandbox: block network access
+                "--memory", "256m",    // Limit memory usage
+                "frolvlad/alpine-gxx", // Lightweight image containing gcc/g++ compilers
+                "sh", "-c", "cat > main.cpp && g++ main.cpp -o main && ./main" 
+                // Takes STDIN code, writes it to main.cpp, compiles it, and executes it immediately
+            );
+        } else {
+            resultMap.put("output", "Error: Unsupported language '" + language + "'. Only Python, Java, and C++ are supported.");
             return resultMap;
         }
 
         try {
-            // 1. Build a docker command that reads from standard input (-i)
-            // Notice: No file mounts (-v) are used here!
-            List<String> command = Arrays.asList(
-                "docker", "run", "--rm",
-                "-i",                  // Interactive mode: allows us to stream code to STDIN
-                "--net", "none",       // Secure sandbox: block network access
-                "--memory", "128m",    // Limit memory usage
-                "python:3.10-slim",
-                "python", "-"          // Tell Python to execute code directly from standard input
-            );
-
-            // 2. Start the process on the OS level
+            // 2. Start the chosen container process
             ProcessBuilder pb = new ProcessBuilder(command);
             Process process = pb.start();
 
-            // 3. Write the user's code straight into the container's standard input stream
+            // 3. Stream the raw user code straight into the container's standard input
             try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()))) {
                 writer.write(request.getCode());
                 writer.flush();
             }
 
-            // 4. Enforce a strict timeout constraint (Protects against infinite loops)
+            // 4. Enforce strict execution timeout limits (Protects against infinite loops)
             boolean finished = process.waitFor(5, TimeUnit.SECONDS);
 
             if (!finished) {
@@ -50,7 +70,7 @@ public class CompilerService {
                 return resultMap;
             }
 
-            // 5. Capture the output streams
+            // 5. Capture outputs from the process execution
             String stdout = readStream(process.getInputStream());
             String stderr = readStream(process.getErrorStream());
 
